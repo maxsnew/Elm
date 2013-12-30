@@ -14,7 +14,7 @@ import Data.Traversable (traverse)
 import SourceSyntax.Location
 import SourceSyntax.Helpers (isTuple)
 import qualified SourceSyntax.Type as Src
-
+ 
 data Term1 a
     = App1 a a
     | Fun1 a a
@@ -361,7 +361,7 @@ toSrcType variable = do
             return (Src.Data name (ts ++ [b']))
           Fun1 a b -> Src.Lambda <$> toSrcType a <*> toSrcType b
           Var1 a -> toSrcType a
-          EmptyRecord1 -> return Src.EmptyRecord
+          EmptyRecord1 -> return Src.emptyRecord
           Record1 fs ext -> do
             fs' <- traverse (mapM toSrcType) fs
             let fs'' = concat [ map ((,) name) ts | (name,ts) <- Map.toList fs' ]
