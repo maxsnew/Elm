@@ -20,6 +20,9 @@ fieldMap :: [(String,a)] -> Map.Map String [a]
 fieldMap fields =
     foldl (\r (x,t) -> Map.insertWith (++) x [t] r) Map.empty fields
 
+record :: [(String, Type)] -> String -> Type
+record fields base = Record fields (Just base)
+
 recordOf :: [(String,Type)] -> Type
 recordOf fields = Record fields Nothing
 
@@ -29,6 +32,9 @@ listOf t = Data "_List" [t]
 tupleOf :: [Type] -> Type
 tupleOf ts = Data ("_Tuple" ++ show (length ts)) ts
 
+-- (++) is probably not right here come back to this
+recordUnion :: [(String, Type)] -> [(String, Type)] -> Maybe String -> Type
+recordUnion sts1 sts2 mv = Record (sts1 ++ sts2) mv
 
 instance Pretty Type where
   pretty tipe =
@@ -40,9 +46,10 @@ instance Pretty Type where
       Data name tipes
           | Help.isTuple name -> P.parens . P.sep . P.punctuate P.comma $ map pretty tipes
           | otherwise -> P.hang (P.text name) 2 (P.sep $ map prettyParens tipes)
-      Record fields ext -> P.braces $ case ext of
-                                 Nothing  -> prettyFields
-                                 Just ext -> P.hang (pretty (Var ext) <+> P.text "|") 4 prettyFields
+      Record fields ext ->
+        P.braces $ case ext of
+          Nothing  -> prettyFields
+          Just ext -> P.hang (pretty (Var ext) <+> P.text "|") 4 prettyFields
           where
             prettyField (f,t) = P.text f <+> P.text ":" <+> pretty t
             prettyFields = commaSep . map prettyField $ fields

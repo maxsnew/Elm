@@ -107,8 +107,9 @@ illFormedTypes decls = map report (Maybe.mapMaybe isIllFormed (aliases ++ adts))
             T.Lambda t1 t2 -> Set.union (freeVars t1) (freeVars t2)
             T.Var x -> Set.singleton x
             T.Data _ ts -> Set.unions (map freeVars ts)
-            T.EmptyRecord -> Set.empty
-            T.Record fields ext -> Set.unions (freeVars ext : map (freeVars . snd) fields)
+            T.Record fields ext ->
+              Set.unions $ maybe Set.empty Set.singleton ext
+                           : map (freeVars . snd) fields
 
       undeclared tvars tipes = Set.difference used declared
           where
@@ -151,8 +152,7 @@ infiniteTypeAliases decls =
             T.Lambda a b -> infinite a || infinite b
             T.Var _ -> False
             T.Data name' ts -> name == name' || any infinite ts
-            T.EmptyRecord -> False
-            T.Record fields ext -> infinite ext || any (infinite . snd) fields
+            T.Record fields _ -> any (infinite . snd) fields
 
       report decl@(TypeAlias name args tipe) =
           P.vcat [ P.text $ eightyCharLines 0 msg1

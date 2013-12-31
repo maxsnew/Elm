@@ -7,33 +7,40 @@ import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.List as List
 import SourceSyntax.Type
-import SourceSyntax.Module
+import SourceSyntax.Module as M
 
 type Rules = ([(String,[String],Type)], Type -> Type)
 
+rules :: M.Interfaces
+         -> [(String, [String], Type)]
+         -> [([Char], ImportMethod)]
+         -> Rules
 rules interfaces moduleAliases moduleImports =
     (collect interfaces moduleAliases, localizer moduleImports)
 
+collect :: M.Interfaces
+           -> [(String, [String], Type)]
+           -> [(String, [String], Type)]
 collect interfaces moduleAliases =
     filter (not . isPrimitive) rawAliases
     where
       rawAliases =
-          moduleAliases ++ concatMap iAliases (Map.elems interfaces)
+        moduleAliases ++ concatMap iAliases (Map.elems interfaces)
 
       isPrimitive (_,_,tipe) =
           case tipe of
           Data _ [] -> True
           _ -> False
 
+localizer :: [([Char], ImportMethod)] -> Type -> Type
 localizer moduleImports = go
   where
     go tipe =
         case tipe of
           Var _ -> tipe
-          EmptyRecord -> tipe
           Lambda t1 t2 -> Lambda (go t1) (go t2)
           Data name ts -> Data (localize name) (map go ts)
-          Record fs ext -> Record (map (second go) fs) (go ext)
+          Record fs ext -> Record (map (second go) fs) ext
 
     byMethod = foldr (\(n,m) d -> Map.insertWith (++) n [m] d)
                Map.empty moduleImports
@@ -83,10 +90,9 @@ canonicalRealias aliases tipe =
     tipe' =
         case tipe of
           Var _ -> tipe
-          EmptyRecord -> tipe
           Lambda t1 t2 -> Lambda (f t1) (f t2)
           Data name ts -> Data name (map f ts)
-          Record fs ext -> Record (map (second f) fs) (f ext)
+          Record fs ext -> Record (map (second f) fs) ext
 
 allEqual [] = True
 allEqual (x:xs) = all (==x) xs
@@ -102,8 +108,7 @@ bestType tipes = fst $ List.minimumBy (\a b -> compare (snd a) (snd b)) pairs
             Lambda t1 t2 -> numFields t1 + numFields t2
             Var _ -> 0
             Data _ ts -> sum (map numFields ts)
-            EmptyRecord -> 0
-            Record fields ext -> length fields + sum (map (numFields . snd) fields) + numFields ext
+            Record fields _ -> length fields + sum (map (numFields . snd) fields)
 
 diff :: Type -> Type -> Maybe [(String,Type)]
 diff general specific =
@@ -113,27 +118,31 @@ diff general specific =
       (Data gname gts, Data sname sts)
           | gname == sname && length gts == length sts ->
               concat <$> zipWithM diff gts sts
-      (EmptyRecord, EmptyRecord) -> Just []
-      (Record _ _, Record _ _) ->
-          let (gfs,gext) = collectRecords general
-              (sfs,sext) = collectRecords specific
-              gfields = collectFields gfs
+      (Record gfs gext, Record sfs sext) ->
+          let gfields = collectFields gfs
               sfields = collectFields sfs
 
               overlap = Map.intersectionWith (\gs ss -> length gs == length ss) sfields gfields
               isAligned = Map.size gfields == Map.size overlap && and (Map.elems overlap)
-          in
-              case isAligned of
-                False -> Nothing
-                True -> let remaining = Map.difference sfields gfields
-                            sext' = if Map.null remaining then sext else
-                                        Record (flattenFields remaining) sext
-                            matchMap = Map.intersectionWith (zipWith diff) gfields sfields
-                        in  concat <$> sequence (diff gext sext' : concat (Map.elems matchMap))
+          in case isAligned of
+            False -> Nothing
+            True ->
+              -- I'm not sure if this is the correct way to do this
+              let remaining = Map.difference sfields gfields
+                  toType = maybe emptyRecord Var
+                  gext' = toType gext
+                  sext' = if Map.null remaining
+                          then toType sext
+                          else Record (flattenFields remaining) sext
+                  matchMap = Map.intersectionWith (zipWith diff) gfields sfields
+              in concat <$> sequence (-- diff gext' sext' :
+                                      concat (Map.elems matchMap))
       (_,_) -> Nothing
 
+collectFields :: [(String, Type)] -> Map.Map String [Type]
 collectFields fields =
     foldr (\(f,t) fs -> Map.insertWith (++) f [t] fs) Map.empty fields
 
+flattenFields :: Map.Map String [Type] -> [(String, Type)]
 flattenFields fields =
     concatMap (\(f,ts) -> map ((,) f) ts) (Map.toList fields)

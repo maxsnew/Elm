@@ -46,8 +46,7 @@ renameType rename tipe =
       Type.Lambda a b -> Type.Lambda `liftM` rnm a `ap` rnm b
       Type.Var x -> return tipe
       Type.Data name ts -> Type.Data `liftM` rename name `ap` mapM rnm ts
-      Type.EmptyRecord -> return tipe
-      Type.Record fields ext -> Type.Record `liftM` mapM rnm' fields `ap` rnm ext
+      Type.Record fields ext -> Type.Record `liftM` mapM rnm' fields `ap` return ext
           where rnm' (f,t) = (,) f `liftM` rnm t
 
 metadataModule :: Interfaces -> MetadataModule t v -> Either [Doc] (MetadataModule t v)

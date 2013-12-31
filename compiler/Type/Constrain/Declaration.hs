@@ -36,17 +36,15 @@ toDefs decl =
         [ Src.TypeAnnotation name $ foldr Type.Lambda tipe args
         , Src.Def (P.PVar name) $ buildFunction record vars ]
       where
-        args = case ext of
-                 Type.EmptyRecord -> map snd fields
-                 _ -> map snd fields ++ [ext]
+        args = map snd fields ++ toType ext
+        toType = maybe [] (return . Type.Var)
 
         var = L.none . Src.Var
         vars = take (length args) arguments
 
         efields = zip (map fst fields) (map var vars)
-        record = case ext of
-                   Type.EmptyRecord -> L.none $ Src.Record efields
-                   _ -> foldl (\r (f,v) -> L.none $ Src.Insert r f v) (var $ last vars) efields
+        record = foldl insert (var $ last vars) efields
+        insert r (f, v) = L.none $ Src.Insert r f v
 
     -- Type aliases must be added to an extended equality dictionary,
     -- but they do not require any basic constraints.

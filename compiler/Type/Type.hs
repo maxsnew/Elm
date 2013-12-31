@@ -365,15 +365,20 @@ toSrcType variable = do
           Record1 fs ext -> do
             fs' <- traverse (mapM toSrcType) fs
             let fs'' = concat [ map ((,) name) ts | (name,ts) <- Map.toList fs' ]
-            Src.Record fs'' <$> toSrcType ext
+            extSrc <- toSrcType ext
+            return $ case extSrc of
+              Src.Var s        -> Src.Record fs'' (Just s)
+              Src.Record rfs m -> Src.recordUnion fs'' rfs m
+              _                -> throwErr
     Nothing ->
         case name desc of
           Just x@(c:cs) | Char.isLower c -> return (Src.Var x)
                         | otherwise      -> return (Src.Data x [])
-          _ -> error $ concat
-                        [ "Problem converting the following type "
-                        , "from a type-checker type to a source-syntax type:"
-                        , P.render (pretty Never variable) ]
+          _ -> throwErr
+  where throwErr = error $ concat
+                   [ "Problem converting the following type "
+                   , "from a type-checker type to a source-syntax type:"
+                   , P.render (pretty Never variable) ]
 
 data AppStructure = List Variable | Tuple [Variable] | Other
 
